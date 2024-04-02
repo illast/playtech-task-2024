@@ -2,49 +2,67 @@ package com.playtech.assignment;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
 
-// This template shows input parameters format.
-// It is otherwise not mandatory to use, you can write everything from scratch if you wish.
 public class TransactionProcessorSample {
 
     public static void main(final String[] args) throws IOException {
         List<User> users = TransactionProcessorSample.readUsers(Paths.get(args[0]));
-        List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
-        List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
-
-        List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
-
-        TransactionProcessorSample.writeBalances(Paths.get(args[3]), users);
-        TransactionProcessorSample.writeEvents(Paths.get(args[4]), events);
+        System.out.println(users);
+//        List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
+//        List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
+//
+//        List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
+//
+//        TransactionProcessorSample.writeBalances(Paths.get(args[3]), users);
+//        TransactionProcessorSample.writeEvents(Paths.get(args[4]), events);
     }
 
     private static List<User> readUsers(final Path filePath) {
-        // ToDo Implementation
-        return new ArrayList<>();
+        List<User> users = new ArrayList<>();
+        try {
+            List<String> lines = Files.readAllLines(filePath);
+            for (int i = 1; i < lines.size(); i++) {
+                String[] line = lines.get(i).split(",");
+                User user = new User(
+                        line[0],
+                        line[1],
+                        line[2],
+                        line[3],
+                        line[4],
+                        line[5],
+                        line[6],
+                        line[7],
+                        line[8]
+                );
+                users.add(user);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return users;
     }
 
     private static List<Transaction> readTransactions(final Path filePath) {
-        // ToDo Implementation
+        System.out.println(filePath);
         return new ArrayList<>();
     }
 
     private static List<BinMapping> readBinMappings(final Path filePath) {
-        // ToDo Implementation
+        System.out.println(filePath);
         return new ArrayList<>();
     }
 
     private static List<Event> processTransactions(final List<User> users, final List<Transaction> transactions, final List<BinMapping> binMappings) {
-        // ToDo Implementation
         return null;
     }
 
     private static void writeBalances(final Path filePath, final List<User> users) {
-        // ToDo Implementation
     }
 
     private static void writeEvents(final Path filePath, final List<Event> events) throws IOException {
@@ -60,10 +78,45 @@ public class TransactionProcessorSample {
 
 class User {
 
+    private final String userId;
+    private final String username;
+    private final String balance;
+    private final String country;
+    private final String frozen;
+    private final String depositMin;
+    private final String deposit_max;
+    private final String withdrawMin;
+    private final String withdrawMax;
+
+    public User(String userId, String username, String balance, String country, String frozen, String depositMin, String deposit_max, String withdrawMin, String withdrawMax) {
+        this.userId = userId;
+        this.username = username;
+        this.balance = balance;
+        this.country = country;
+        this.frozen = frozen;
+        this.depositMin = depositMin;
+        this.deposit_max = deposit_max;
+        this.withdrawMin = withdrawMin;
+        this.withdrawMax = withdrawMax;
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "userId=" + userId +
+                ", username='" + username + '\'' +
+                ", balance=" + balance +
+                ", country='" + country + '\'' +
+                ", frozen=" + frozen +
+                ", depositMin=" + depositMin +
+                ", deposit_max=" + deposit_max +
+                ", withdrawMin=" + withdrawMin +
+                ", withdrawMax=" + withdrawMax +
+                '}';
+    }
 }
 
 class Transaction {
-
 }
 
 class BinMapping {
