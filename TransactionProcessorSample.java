@@ -17,6 +17,7 @@ public class TransactionProcessorSample {
         List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
         System.out.println(transactions);
         List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
+        System.out.println(binMappings);
 
 //        List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
 //
@@ -55,8 +56,18 @@ public class TransactionProcessorSample {
     }
 
     private static List<BinMapping> readBinMappings(final Path filePath) {
-        System.out.println(filePath);
-        return new ArrayList<>();
+        List<BinMapping> binMappings = new ArrayList<>();
+        try {
+            List<String> lines = Files.readAllLines(filePath);
+            for (int i = 1; i < lines.size(); i++) {
+                String[] line = lines.get(i).split(",");
+                BinMapping binMapping = new BinMapping(line[0], line[1], line[2], line[3], line[4]);
+                binMappings.add(binMapping);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return binMappings;
     }
 
     private static List<Event> processTransactions(final List<User> users, final List<Transaction> transactions, final List<BinMapping> binMappings) {
@@ -149,6 +160,31 @@ class Transaction {
 }
 
 class BinMapping {
+
+    private final String name;
+    private final String rangeFrom;
+    private final String rangeTo;
+    private final String type;
+    private final String country;
+
+    BinMapping(String name, String rangeFrom, String rangeTo, String type, String country) {
+        this.name = name;
+        this.rangeFrom = rangeFrom;
+        this.rangeTo = rangeTo;
+        this.type = type;
+        this.country = country;
+    }
+
+    @Override
+    public String toString() {
+        return "BinMapping{" +
+                "name='" + name + '\'' +
+                ", rangeFrom='" + rangeFrom + '\'' +
+                ", rangeTo='" + rangeTo + '\'' +
+                ", type='" + type + '\'' +
+                ", country='" + country + '\'' +
+                '}';
+    }
 }
 
 class Event {
