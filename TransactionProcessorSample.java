@@ -14,9 +14,10 @@ public class TransactionProcessorSample {
     public static void main(final String[] args) throws IOException {
         List<User> users = TransactionProcessorSample.readUsers(Paths.get(args[0]));
         System.out.println(users);
-//        List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
-//        List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
-//
+        List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
+        System.out.println(transactions);
+        List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
+
 //        List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
 //
 //        TransactionProcessorSample.writeBalances(Paths.get(args[3]), users);
@@ -29,17 +30,7 @@ public class TransactionProcessorSample {
             List<String> lines = Files.readAllLines(filePath);
             for (int i = 1; i < lines.size(); i++) {
                 String[] line = lines.get(i).split(",");
-                User user = new User(
-                        line[0],
-                        line[1],
-                        line[2],
-                        line[3],
-                        line[4],
-                        line[5],
-                        line[6],
-                        line[7],
-                        line[8]
-                );
+                User user = new User(line[0], line[1], line[2], line[3], line[4], line[5], line[6], line[7], line[8]);
                 users.add(user);
             }
         } catch (IOException e) {
@@ -49,8 +40,18 @@ public class TransactionProcessorSample {
     }
 
     private static List<Transaction> readTransactions(final Path filePath) {
-        System.out.println(filePath);
-        return new ArrayList<>();
+        List<Transaction> transactions = new ArrayList<>();
+        try {
+            List<String> lines = Files.readAllLines(filePath);
+            for (int i = 1; i < lines.size(); i++) {
+                String[] line = lines.get(i).split(",");
+                Transaction transaction = new Transaction(line[0], line[1], line[2], line[3], line[4], line[5]);
+                transactions.add(transaction);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return transactions;
     }
 
     private static List<BinMapping> readBinMappings(final Path filePath) {
@@ -103,20 +104,48 @@ class User {
     @Override
     public String toString() {
         return "User{" +
-                "userId=" + userId +
+                "userId='" + userId + '\'' +
                 ", username='" + username + '\'' +
-                ", balance=" + balance +
+                ", balance='" + balance + '\'' +
                 ", country='" + country + '\'' +
-                ", frozen=" + frozen +
-                ", depositMin=" + depositMin +
-                ", deposit_max=" + deposit_max +
-                ", withdrawMin=" + withdrawMin +
-                ", withdrawMax=" + withdrawMax +
+                ", frozen='" + frozen + '\'' +
+                ", depositMin='" + depositMin + '\'' +
+                ", deposit_max='" + deposit_max + '\'' +
+                ", withdrawMin='" + withdrawMin + '\'' +
+                ", withdrawMax='" + withdrawMax + '\'' +
                 '}';
     }
 }
 
 class Transaction {
+
+    private final String transactionId;
+    private final String userId;
+    private final String type;
+    private final String amount;
+    private final String method;
+    private final String accountNumber;
+
+    public Transaction(String transactionId, String userId, String type, String amount, String method, String accountNumber) {
+        this.transactionId = transactionId;
+        this.userId = userId;
+        this.type = type;
+        this.amount = amount;
+        this.method = method;
+        this.accountNumber = accountNumber;
+    }
+
+    @Override
+    public String toString() {
+        return "Transaction{" +
+                "transactionId='" + transactionId + '\'' +
+                ", userId='" + userId + '\'' +
+                ", type='" + type + '\'' +
+                ", amount='" + amount + '\'' +
+                ", method='" + method + '\'' +
+                ", accountNumber='" + accountNumber + '\'' +
+                '}';
+    }
 }
 
 class BinMapping {
