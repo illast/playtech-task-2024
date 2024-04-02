@@ -4,19 +4,19 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 
 public class TransactionProcessorSample {
 
     public static void main(final String[] args) throws IOException {
-        List<User> users = TransactionProcessorSample.readUsers(Paths.get(args[0]));
+        List<User> users = readObjects(args[0], User::new);
         System.out.println(users);
-        List<Transaction> transactions = TransactionProcessorSample.readTransactions(Paths.get(args[1]));
+        List<Transaction> transactions = readObjects(args[1], Transaction::new);
         System.out.println(transactions);
-        List<BinMapping> binMappings = TransactionProcessorSample.readBinMappings(Paths.get(args[2]));
+        List<BinMapping> binMappings = readObjects(args[2], BinMapping::new);
         System.out.println(binMappings);
 
 //        List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
@@ -25,49 +25,15 @@ public class TransactionProcessorSample {
 //        TransactionProcessorSample.writeEvents(Paths.get(args[4]), events);
     }
 
-    private static List<User> readUsers(final Path filePath) {
-        List<User> users = new ArrayList<>();
-        try {
-            List<String> lines = Files.readAllLines(filePath);
-            for (int i = 1; i < lines.size(); i++) {
-                String[] line = lines.get(i).split(",");
-                User user = new User(line[0], line[1], line[2], line[3], line[4], line[5], line[6], line[7], line[8]);
-                users.add(user);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+    private static <T> List<T> readObjects(final String filePath, Function<String[], T> constructor) throws IOException {
+        List<T> objects = new ArrayList<>();
+        List<String> lines = Files.readAllLines(Path.of(filePath));
+        for (int i = 1; i < lines.size(); i++) {
+            String[] line = lines.get(i).split(",");
+            T object = constructor.apply(line);
+            objects.add(object);
         }
-        return users;
-    }
-
-    private static List<Transaction> readTransactions(final Path filePath) {
-        List<Transaction> transactions = new ArrayList<>();
-        try {
-            List<String> lines = Files.readAllLines(filePath);
-            for (int i = 1; i < lines.size(); i++) {
-                String[] line = lines.get(i).split(",");
-                Transaction transaction = new Transaction(line[0], line[1], line[2], line[3], line[4], line[5]);
-                transactions.add(transaction);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return transactions;
-    }
-
-    private static List<BinMapping> readBinMappings(final Path filePath) {
-        List<BinMapping> binMappings = new ArrayList<>();
-        try {
-            List<String> lines = Files.readAllLines(filePath);
-            for (int i = 1; i < lines.size(); i++) {
-                String[] line = lines.get(i).split(",");
-                BinMapping binMapping = new BinMapping(line[0], line[1], line[2], line[3], line[4]);
-                binMappings.add(binMapping);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return binMappings;
+        return objects;
     }
 
     private static List<Event> processTransactions(final List<User> users, final List<Transaction> transactions, final List<BinMapping> binMappings) {
@@ -87,29 +53,27 @@ public class TransactionProcessorSample {
     }
 }
 
-
 class User {
+    String userId;
+    String username;
+    String balance;
+    String country;
+    String frozen;
+    String depositMin;
+    String deposit_max;
+    String withdrawMin;
+    String withdrawMax;
 
-    private final String userId;
-    private final String username;
-    private final String balance;
-    private final String country;
-    private final String frozen;
-    private final String depositMin;
-    private final String deposit_max;
-    private final String withdrawMin;
-    private final String withdrawMax;
-
-    public User(String userId, String username, String balance, String country, String frozen, String depositMin, String deposit_max, String withdrawMin, String withdrawMax) {
-        this.userId = userId;
-        this.username = username;
-        this.balance = balance;
-        this.country = country;
-        this.frozen = frozen;
-        this.depositMin = depositMin;
-        this.deposit_max = deposit_max;
-        this.withdrawMin = withdrawMin;
-        this.withdrawMax = withdrawMax;
+    User(String[] fields) {
+        this.userId = fields[0];
+        this.username = fields[1];
+        this.balance = fields[2];
+        this.country = fields[3];
+        this.frozen = fields[4];
+        this.depositMin = fields[5];
+        this.deposit_max = fields[6];
+        this.withdrawMin = fields[7];
+        this.withdrawMax = fields[8];
     }
 
     @Override
@@ -129,21 +93,20 @@ class User {
 }
 
 class Transaction {
+    String transactionId;
+    String userId;
+    String type;
+    String amount;
+    String method;
+    String accountNumber;
 
-    private final String transactionId;
-    private final String userId;
-    private final String type;
-    private final String amount;
-    private final String method;
-    private final String accountNumber;
-
-    public Transaction(String transactionId, String userId, String type, String amount, String method, String accountNumber) {
-        this.transactionId = transactionId;
-        this.userId = userId;
-        this.type = type;
-        this.amount = amount;
-        this.method = method;
-        this.accountNumber = accountNumber;
+    Transaction(String[] fields) {
+        this.transactionId = fields[0];
+        this.userId = fields[1];
+        this.type = fields[2];
+        this.amount = fields[3];
+        this.method = fields[4];
+        this.accountNumber = fields[5];
     }
 
     @Override
@@ -160,19 +123,18 @@ class Transaction {
 }
 
 class BinMapping {
+    String name;
+    String rangeFrom;
+    String rangeTo;
+    String type;
+    String country;
 
-    private final String name;
-    private final String rangeFrom;
-    private final String rangeTo;
-    private final String type;
-    private final String country;
-
-    BinMapping(String name, String rangeFrom, String rangeTo, String type, String country) {
-        this.name = name;
-        this.rangeFrom = rangeFrom;
-        this.rangeTo = rangeTo;
-        this.type = type;
-        this.country = country;
+    BinMapping(String[] fields) {
+        this.name = fields[0];
+        this.rangeFrom = fields[1];
+        this.rangeTo = fields[2];
+        this.type = fields[3];
+        this.country = fields[4];
     }
 
     @Override
