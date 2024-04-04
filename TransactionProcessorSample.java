@@ -2,6 +2,7 @@ package com.playtech.assignment;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +14,8 @@ import java.util.function.Function;
 
 
 public class TransactionProcessorSample {
+
+    private static final Map<String, String> accountNumberToUserId = new HashMap<>();
 
     public static void main(final String[] args) throws IOException {
         List<User> users = readObjects(args[0], User::new);
@@ -45,6 +48,7 @@ public class TransactionProcessorSample {
                 if (transaction.type.equals("DEPOSIT")) {
                     transaction.user.successfulDeposits.put(transaction.accountNumber, true);
                 }
+                accountNumberToUserId.put(transaction.accountNumber, transaction.user.userId);
                 events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
             }
         }
@@ -57,7 +61,11 @@ public class TransactionProcessorSample {
     }
 
     private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
-        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events) && isPaymentMethodAndCountryValid(transaction, binMappings, events) && isAmountValid(transaction, events);
+        return isTransactionIdUnique(transaction, events)
+                && isUserValid(transaction, users, events)
+                && isAccountNumberAvailable(transaction, events)
+                && isAmountValid(transaction, events)
+                && isPaymentMethodAndCountryValid(transaction, binMappings, events);
     }
 
     private static boolean isTransactionIdUnique(Transaction transaction, List<Event> events) {
@@ -182,25 +190,37 @@ public class TransactionProcessorSample {
         return false;
     }
 
-    private static boolean isAmountExceedingBalance(Transaction transaction, List<Event> events, double amount) {
-        double balance = Double.parseDouble(transaction.user.balance);
+    private static boolean isAccountNumberAvailable(Transaction transaction, List<Event> events) {
+        String userId = transaction.userId;
+        String accountNumber = transaction.accountNumber;
+        String associatedUserIdWithAccountNumber = accountNumberToUserId.getOrDefault(accountNumber, "");
 
-        if (transaction.type.equals("WITHDRAW") && amount > balance) {
+        if (!associatedUserIdWithAccountNumber.isEmpty() && !associatedUserIdWithAccountNumber.equals(userId)) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Account " + accountNumber + " is in use by other user"));
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isAmountExceedingBalance(Transaction transaction, List<Event> events, BigDecimal amount) {
+        BigDecimal balance = new BigDecimal(transaction.user.balance);
+
+        if (transaction.type.equals("WITHDRAW") && amount.compareTo(balance) > 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Not enough balance to withdraw " + amount + " - balance is too low at " + balance));
             return true;
         }
         return false;
     }
 
-    private static boolean isDepositAmountValid(Transaction transaction, List<Event> events, double amount) {
-        double depositMin = Double.parseDouble(transaction.user.depositMin);
-        double depositMax = Double.parseDouble(transaction.user.deposit_max);
+    private static boolean isDepositAmountValid(Transaction transaction, List<Event> events, BigDecimal amount) {
+        BigDecimal depositMin = new BigDecimal(transaction.user.depositMin);
+        BigDecimal depositMax = new BigDecimal(transaction.user.depositMax);
 
-        if (amount > depositMax) {
+        if (amount.compareTo(depositMax) > 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is over the deposit limit of " + depositMax));
             return false;
         }
-        if (amount < depositMin) {
+        if (amount.compareTo(depositMin) < 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is under the deposit limit of " + depositMin));
             return false;
         }
@@ -208,15 +228,15 @@ public class TransactionProcessorSample {
         return true;
     }
 
-    private static boolean isWithdrawAmountValid(Transaction transaction, List<Event> events, double amount) {
-        double withdrawMin = Double.parseDouble(transaction.user.withdrawMin);
-        double withdrawMax = Double.parseDouble(transaction.user.withdrawMax);
+    private static boolean isWithdrawAmountValid(Transaction transaction, List<Event> events, BigDecimal amount) {
+        BigDecimal withdrawMin = new BigDecimal(transaction.user.withdrawMin);
+        BigDecimal withdrawMax = new BigDecimal(transaction.user.withdrawMax);
 
-        if (amount > withdrawMax) {
+        if (amount.compareTo(withdrawMax) > 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is over the withdraw limit of " + withdrawMax));
             return false;
         }
-        if (amount < withdrawMin) {
+        if (amount.compareTo(withdrawMin) < 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is under the withdraw limit of " + withdrawMin));
             return false;
         }
@@ -234,8 +254,8 @@ public class TransactionProcessorSample {
     }
 
     private static boolean isAmountValid(Transaction transaction, List<Event> events) {
-        double amount = Double.parseDouble(transaction.amount);
-        if (amount <= 0 || isAmountExceedingBalance(transaction, events, amount)) {
+        BigDecimal amount = new BigDecimal(transaction.amount);
+        if (amount.compareTo(BigDecimal.ZERO) <= 0 || isAmountExceedingBalance(transaction, events, amount)) {
             return false;
         } else if (transaction.type.equals("DEPOSIT")) {
             return isDepositAmountValid(transaction, events, amount);
@@ -266,7 +286,7 @@ class User {
     public String country;
     public String frozen;
     public String depositMin;
-    public String deposit_max;
+    public String depositMax;
     public String withdrawMin;
     public String withdrawMax;
     public Map<String, Boolean> successfulDeposits;
@@ -278,7 +298,7 @@ class User {
         this.country = fields[3];
         this.frozen = fields[4];
         this.depositMin = fields[5];
-        this.deposit_max = fields[6];
+        this.depositMax = fields[6];
         this.withdrawMin = fields[7];
         this.withdrawMax = fields[8];
         this.successfulDeposits = new HashMap<>();
@@ -293,7 +313,7 @@ class User {
                 ", country='" + country + '\'' +
                 ", frozen='" + frozen + '\'' +
                 ", depositMin='" + depositMin + '\'' +
-                ", deposit_max='" + deposit_max + '\'' +
+                ", deposit_max='" + depositMax + '\'' +
                 ", withdrawMin='" + withdrawMin + '\'' +
                 ", withdrawMax='" + withdrawMax + '\'' +
                 '}';
