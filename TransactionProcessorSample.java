@@ -45,9 +45,16 @@ public class TransactionProcessorSample {
         for (Transaction transaction : transactions) {
             boolean isValid = validateTransaction(transaction, users, binMappings, events);
             if (isValid) {
+                BigDecimal balance = new BigDecimal(transaction.user.balance);
+                BigDecimal amount = new BigDecimal(transaction.amount);
                 if (transaction.type.equals("DEPOSIT")) {
                     transaction.user.successfulDeposits.put(transaction.accountNumber, true);
+                    transaction.user.balance = balance.add(amount).toString();
                 }
+                else if (transaction.type.equals("WITHDRAW")) {
+                    transaction.user.balance = balance.subtract(amount).toString();
+                }
+
                 accountNumberToUserId.put(transaction.accountNumber, transaction.user.userId);
                 events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
             }
