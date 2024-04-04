@@ -65,9 +65,10 @@ public class TransactionProcessorSample {
         return true;
     }
 
-    private static User findUser(String userId, List<User> users) {
+    private static User findUser(Transaction transaction, List<User> users) {
         for (User user : users) {
-            if (user.userId.equals(userId)) {
+            if (user.userId.equals(transaction.userId)) {
+                transaction.user = user;
                 return user;
             }
         }
@@ -75,7 +76,7 @@ public class TransactionProcessorSample {
     }
 
     private static boolean isUserValid(Transaction transaction, List<User> users, List<Event> events) {
-        User user = findUser(transaction.userId, users);
+        User user = findUser(transaction, users);
         if (user == null || user.frozen.equals("1")) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "User " + transaction.userId + " not found in Users"));
             return false;
@@ -107,13 +108,27 @@ public class TransactionProcessorSample {
         return bigInteger.mod(modulus).intValue() == 1;
     }
 
-    private static boolean isDebitCard(String accountNumber, List<BinMapping> binMappings) {
+    private static BinMapping findBinMapping(Transaction transaction, List<BinMapping> binMappings) {
         for (BinMapping binMapping : binMappings) {
-            if (binMapping.type.equals("DC") && (isAccountNumberInRange(accountNumber, binMapping))) {
-                return true;
+            if (isAccountNumberInRange(transaction.accountNumber, binMapping)) {
+                transaction.binMapping = binMapping;
+                return binMapping;
             }
         }
-        return false;
+        return null;
+    }
+
+    private static boolean isDebitCard(Transaction transaction, List<BinMapping> binMappings, List<Event> events) {
+        BinMapping binMapping = findBinMapping(transaction, binMappings);
+        if (binMapping == null) {
+            new Event(transaction.transactionId, Event.STATUS_DECLINED, "Unable to find card type for transaction ID: " + transaction.transactionId);
+            return false;
+        }
+        if (!binMapping.type.equals("DC")) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Only DC cards allowed; got " + binMapping.type));
+            return false;
+        }
+        return true;
     }
 
     private static boolean isAccountNumberInRange(String accountNumber, BinMapping binMapping) {
@@ -129,19 +144,38 @@ public class TransactionProcessorSample {
                 events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid iban " + transaction.accountNumber));
                 return false;
             }
-        }
-        else if ("CARD".equals(transaction.method)) {
-            if(!isDebitCard(transaction.accountNumber, binMappings)) {
-                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Only DC cards allowed; got CC"));
+            return isAccountCountryValid(transaction, events);
+
+        } else if ("CARD".equals(transaction.method)) {
+            if (!isDebitCard(transaction, binMappings, events)) {
                 return false;
             }
-        } else {
-            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid payment method " + transaction.method));
+            return isCardCountryValid(transaction, events);
+        }
+
+        events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid payment method " + transaction.method));
+        return false;
+    }
+
+    private static boolean isAccountCountryValid(Transaction transaction, List<Event> events) {
+        String accountCountry = transaction.accountNumber.substring(0, 2);
+        String userCountry = transaction.user.country;
+        if (!userCountry.equals(accountCountry)) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid account country " + accountCountry + "; expected " + userCountry));
             return false;
         }
         return true;
     }
 
+    private static boolean isCardCountryValid(Transaction transaction, List<Event> events) {
+        String cardCountry = transaction.binMapping.country.substring(0, 2);
+        String userCountry = transaction.user.country;
+        if (!userCountry.equals(cardCountry)) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid country " + cardCountry + "; expected " + userCountry));
+            return false;
+        }
+        return true;
+    }
 
 //    private static void writeBalances(final Path filePath, final List<User> users) {
 //    }
@@ -202,6 +236,8 @@ class Transaction {
     public String amount;
     public String method;
     public String accountNumber;
+    public User user;
+    public BinMapping binMapping;
 
     public Transaction(String[] fields) {
         this.transactionId = fields[0];
