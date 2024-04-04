@@ -2,6 +2,7 @@ package com.playtech.assignment;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public class TransactionProcessorSample {
     }
 
     private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
-        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events);
+        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events) && isPaymentMethodValid(transaction, binMappings, events);
     }
 
     private static boolean isTransactionIdUnique(Transaction transaction, List<Event> events) {
@@ -81,6 +82,66 @@ public class TransactionProcessorSample {
         }
         return true;
     }
+
+    private static boolean isIBANValid(String IBAN) {
+        if (IBAN.length() != 22) {
+            return false;
+        }
+
+        IBAN = IBAN.substring(4) + IBAN.substring(0, 4);
+
+        StringBuilder expandedIBAN = new StringBuilder();
+        for (int i = 0; i < IBAN.length(); i++) {
+            char c = IBAN.charAt(i);
+            if (Character.isLetter(c)) {
+                int value = c - 'A' + 10;
+                expandedIBAN.append(value);
+            }
+            else {
+                expandedIBAN.append(c);
+            }
+        }
+
+        BigInteger bigInteger = new BigInteger(expandedIBAN.toString());
+        BigInteger modulus = new BigInteger("97");
+        return bigInteger.mod(modulus).intValue() == 1;
+    }
+
+    private static boolean isDebitCard(String accountNumber, List<BinMapping> binMappings) {
+        for (BinMapping binMapping : binMappings) {
+            if (binMapping.type.equals("DC") && (isAccountNumberInRange(accountNumber, binMapping))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isAccountNumberInRange(String accountNumber, BinMapping binMapping) {
+        long accountNumberStart = Long.parseLong(accountNumber.substring(0, binMapping.rangeFrom.length()));
+        long rangeFrom = Long.parseLong(binMapping.rangeFrom);
+        long rangeTo = Long.parseLong(binMapping.rangeTo);
+        return accountNumberStart >= rangeFrom && accountNumberStart <= rangeTo;
+    }
+
+    private static boolean isPaymentMethodValid(Transaction transaction, List<BinMapping> binMappings, List<Event> events) {
+        if ("TRANSFER".equals(transaction.method)) {
+            if (!isIBANValid(transaction.accountNumber)) {
+                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid iban " + transaction.accountNumber));
+                return false;
+            }
+        }
+        else if ("CARD".equals(transaction.method)) {
+            if(!isDebitCard(transaction.accountNumber, binMappings)) {
+                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Only DC cards allowed; got CC"));
+                return false;
+            }
+        } else {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid payment method " + transaction.method));
+            return false;
+        }
+        return true;
+    }
+
 
 //    private static void writeBalances(final Path filePath, final List<User> users) {
 //    }
