@@ -6,7 +6,9 @@ import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 
@@ -40,6 +42,9 @@ public class TransactionProcessorSample {
         for (Transaction transaction : transactions) {
             boolean isValid = validateTransaction(transaction, users, binMappings, events);
             if (isValid) {
+                if (transaction.type.equals("DEPOSIT")) {
+                    transaction.user.successfulDeposits.put(transaction.accountNumber, true);
+                }
                 events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
             }
         }
@@ -52,7 +57,7 @@ public class TransactionProcessorSample {
     }
 
     private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
-        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events) && isPaymentMethodValid(transaction, binMappings, events);
+        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events) && isPaymentMethodAndCountryValid(transaction, binMappings, events) && isAmountValid(transaction, events);
     }
 
     private static boolean isTransactionIdUnique(Transaction transaction, List<Event> events) {
@@ -121,7 +126,7 @@ public class TransactionProcessorSample {
     private static boolean isDebitCard(Transaction transaction, List<BinMapping> binMappings, List<Event> events) {
         BinMapping binMapping = findBinMapping(transaction, binMappings);
         if (binMapping == null) {
-            new Event(transaction.transactionId, Event.STATUS_DECLINED, "Unable to find card type for transaction ID: " + transaction.transactionId);
+            new Event(transaction.transactionId, Event.STATUS_DECLINED, "Unable to find card type for transaction ID " + transaction.transactionId);
             return false;
         }
         if (!binMapping.type.equals("DC")) {
@@ -136,25 +141,6 @@ public class TransactionProcessorSample {
         long rangeFrom = Long.parseLong(binMapping.rangeFrom);
         long rangeTo = Long.parseLong(binMapping.rangeTo);
         return accountNumberStart >= rangeFrom && accountNumberStart <= rangeTo;
-    }
-
-    private static boolean isPaymentMethodValid(Transaction transaction, List<BinMapping> binMappings, List<Event> events) {
-        if ("TRANSFER".equals(transaction.method)) {
-            if (!isIBANValid(transaction.accountNumber)) {
-                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid iban " + transaction.accountNumber));
-                return false;
-            }
-            return isAccountCountryValid(transaction, events);
-
-        } else if ("CARD".equals(transaction.method)) {
-            if (!isDebitCard(transaction, binMappings, events)) {
-                return false;
-            }
-            return isCardCountryValid(transaction, events);
-        }
-
-        events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid payment method " + transaction.method));
-        return false;
     }
 
     private static boolean isAccountCountryValid(Transaction transaction, List<Event> events) {
@@ -175,6 +161,89 @@ public class TransactionProcessorSample {
             return false;
         }
         return true;
+    }
+
+    private static boolean isPaymentMethodAndCountryValid(Transaction transaction, List<BinMapping> binMappings, List<Event> events) {
+        if ("TRANSFER".equals(transaction.method)) {
+            if (!isIBANValid(transaction.accountNumber)) {
+                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid iban " + transaction.accountNumber));
+                return false;
+            }
+            return isAccountCountryValid(transaction, events);
+
+        } else if ("CARD".equals(transaction.method)) {
+            if (!isDebitCard(transaction, binMappings, events)) {
+                return false;
+            }
+            return isCardCountryValid(transaction, events);
+        }
+
+        events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid payment method " + transaction.method));
+        return false;
+    }
+
+    private static boolean isAmountExceedingBalance(Transaction transaction, List<Event> events, double amount) {
+        double balance = Double.parseDouble(transaction.user.balance);
+
+        if (transaction.type.equals("WITHDRAW") && amount > balance) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Not enough balance to withdraw " + amount + " - balance is too low at " + balance));
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isDepositAmountValid(Transaction transaction, List<Event> events, double amount) {
+        double depositMin = Double.parseDouble(transaction.user.depositMin);
+        double depositMax = Double.parseDouble(transaction.user.deposit_max);
+
+        if (amount > depositMax) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is over the deposit limit of " + depositMax));
+            return false;
+        }
+        if (amount < depositMin) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is under the deposit limit of " + depositMin));
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean isWithdrawAmountValid(Transaction transaction, List<Event> events, double amount) {
+        double withdrawMin = Double.parseDouble(transaction.user.withdrawMin);
+        double withdrawMax = Double.parseDouble(transaction.user.withdrawMax);
+
+        if (amount > withdrawMax) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is over the withdraw limit of " + withdrawMax));
+            return false;
+        }
+        if (amount < withdrawMin) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Amount " + amount + " is under the withdraw limit of " + withdrawMin));
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean hasSuccessfulDeposit(Transaction transaction, List<Event> events) {
+        boolean hasSuccessfulDeposit = transaction.user.successfulDeposits.getOrDefault(transaction.accountNumber, false);
+        if (!hasSuccessfulDeposit) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Cannot withdraw with a new account " + transaction.accountNumber));
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isAmountValid(Transaction transaction, List<Event> events) {
+        double amount = Double.parseDouble(transaction.amount);
+        if (amount <= 0 || isAmountExceedingBalance(transaction, events, amount)) {
+            return false;
+        } else if (transaction.type.equals("DEPOSIT")) {
+            return isDepositAmountValid(transaction, events, amount);
+        } else if (transaction.type.equals("WITHDRAW")) {
+            return isWithdrawAmountValid(transaction, events, amount) && hasSuccessfulDeposit(transaction, events);
+        }
+        events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid transaction type " + transaction.type));
+        return false;
     }
 
 //    private static void writeBalances(final Path filePath, final List<User> users) {
@@ -200,6 +269,7 @@ class User {
     public String deposit_max;
     public String withdrawMin;
     public String withdrawMax;
+    public Map<String, Boolean> successfulDeposits;
 
     public User(String[] fields) {
         this.userId = fields[0];
@@ -211,6 +281,7 @@ class User {
         this.deposit_max = fields[6];
         this.withdrawMin = fields[7];
         this.withdrawMax = fields[8];
+        this.successfulDeposits = new HashMap<>();
     }
 
     @Override
