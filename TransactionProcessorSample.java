@@ -51,7 +51,7 @@ public class TransactionProcessorSample {
     }
 
     private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
-        return isTransactionIdUnique(transaction, events);
+        return isTransactionIdUnique(transaction, events) && isUserValid(transaction, users, events);
     }
 
     private static boolean isTransactionIdUnique(Transaction transaction, List<Event> events) {
@@ -64,17 +64,35 @@ public class TransactionProcessorSample {
         return true;
     }
 
-    private static void writeBalances(final Path filePath, final List<User> users) {
-    }
-
-    private static void writeEvents(final Path filePath, final List<Event> events) throws IOException {
-        try (final FileWriter writer = new FileWriter(filePath.toFile(), false)) {
-            writer.append("transaction_id,status,message\n");
-            for (final var event : events) {
-                writer.append(event.transactionId).append(",").append(event.status).append(",").append(event.message).append("\n");
+    private static User findUser(String userId, List<User> users) {
+        for (User user : users) {
+            if (user.userId.equals(userId)) {
+                return user;
             }
         }
+        return null;
     }
+
+    private static boolean isUserValid(Transaction transaction, List<User> users, List<Event> events) {
+        User user = findUser(transaction.userId, users);
+        if (user == null || user.frozen.equals("1")) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "User " + transaction.userId + " not found in Users"));
+            return false;
+        }
+        return true;
+    }
+
+//    private static void writeBalances(final Path filePath, final List<User> users) {
+//    }
+//
+//    private static void writeEvents(final Path filePath, final List<Event> events) throws IOException {
+//        try (final FileWriter writer = new FileWriter(filePath.toFile(), false)) {
+//            writer.append("transaction_id,status,message\n");
+//            for (final var event : events) {
+//                writer.append(event.transactionId).append(",").append(event.status).append(",").append(event.message).append("\n");
+//            }
+//        }
+//    }
 }
 
 class User {
