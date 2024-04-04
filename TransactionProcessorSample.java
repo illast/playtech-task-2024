@@ -37,14 +37,31 @@ public class TransactionProcessorSample {
         List<Event> events = new ArrayList<>();
 
         for (Transaction transaction : transactions) {
-            System.out.println(transaction);
             boolean isValid = validateTransaction(transaction, users, binMappings, events);
             if (isValid) {
                 events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
             }
         }
 
+        for (Event event : events) {
+            System.out.println(event);
+        }
+
         return events;
+    }
+
+    private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
+        return isTransactionIdUnique(transaction, events);
+    }
+
+    private static boolean isTransactionIdUnique(Transaction transaction, List<Event> events) {
+        for (Event event : events) {
+            if (event.transactionId.equals(transaction.transactionId)) {
+                events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Transaction " + transaction.transactionId + " already processed (id non-unique)"));
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void writeBalances(final Path filePath, final List<User> users) {
@@ -57,10 +74,6 @@ public class TransactionProcessorSample {
                 writer.append(event.transactionId).append(",").append(event.status).append(",").append(event.message).append("\n");
             }
         }
-    }
-
-    private static boolean validateTransaction(Transaction transaction, List<User> users, List<BinMapping> binMappings, List<Event> events) {
-        return false;
     }
 }
 
@@ -176,10 +189,6 @@ class Event {
 
     @Override
     public String toString() {
-        return "Event{" +
-                "transactionId='" + transactionId + '\'' +
-                ", status='" + status + '\'' +
-                ", message='" + message + '\'' +
-                '}';
+        return transactionId + ',' + status + ',' + message;
     }
 }
