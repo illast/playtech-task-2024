@@ -6,11 +6,13 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.Locale;
 
 
 public class TransactionProcessorSample {
@@ -24,8 +26,8 @@ public class TransactionProcessorSample {
 
         List<Event> events = TransactionProcessorSample.processTransactions(users, transactions, binMappings);
 
-//        TransactionProcessorSample.writeBalances(Paths.get(args[3]), users);
-//        TransactionProcessorSample.writeEvents(Paths.get(args[4]), events);
+        TransactionProcessorSample.writeBalances(Paths.get(args[3]), users);
+        TransactionProcessorSample.writeEvents(Paths.get(args[4]), events);
     }
 
     private static <T> List<T> readObjects(final String filePath, Function<String[], T> constructor) throws IOException {
@@ -43,27 +45,25 @@ public class TransactionProcessorSample {
         List<Event> events = new ArrayList<>();
 
         for (Transaction transaction : transactions) {
-            boolean isValid = validateTransaction(transaction, users, binMappings, events);
-            if (isValid) {
-                BigDecimal balance = new BigDecimal(transaction.user.balance);
-                BigDecimal amount = new BigDecimal(transaction.amount);
-                if (transaction.type.equals("DEPOSIT")) {
-                    transaction.user.successfulDeposits.put(transaction.accountNumber, true);
-                    transaction.user.balance = balance.add(amount).toString();
-                }
-                else if (transaction.type.equals("WITHDRAW")) {
-                    transaction.user.balance = balance.subtract(amount).toString();
-                }
+            try {
+                boolean isValid = validateTransaction(transaction, users, binMappings, events);
+                if (isValid) {
+                    BigDecimal balance = new BigDecimal(transaction.user.balance);
+                    BigDecimal amount = new BigDecimal(transaction.amount);
+                    if (transaction.type.equals("DEPOSIT")) {
+                        transaction.user.successfulDeposits.put(transaction.accountNumber, true);
+                        transaction.user.balance = balance.add(amount).toString();
+                    } else if (transaction.type.equals("WITHDRAW")) {
+                        transaction.user.balance = balance.subtract(amount).toString();
+                    }
 
-                accountNumberToUserId.put(transaction.accountNumber, transaction.user.userId);
-                events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
+                    accountNumberToUserId.put(transaction.accountNumber, transaction.user.userId);
+                    events.add(new Event(transaction.transactionId, Event.STATUS_APPROVED, "OK"));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
-
-        for (Event event : events) {
-            System.out.println(event);
-        }
-
         return events;
     }
 
@@ -105,15 +105,17 @@ public class TransactionProcessorSample {
     }
 
     private static boolean isIBANValid(String IBAN) {
-        if (IBAN.length() != 22) {
+        int length = IBAN.length();
+        if (length < 4 || length > 34) {
             return false;
         }
 
-        IBAN = IBAN.substring(4) + IBAN.substring(0, 4);
+        String modifiedIBAN = IBAN.substring(0, 2) + "00" + IBAN.substring(4);
+        modifiedIBAN = modifiedIBAN.substring(4) + modifiedIBAN.substring(0, 4);
 
         StringBuilder expandedIBAN = new StringBuilder();
-        for (int i = 0; i < IBAN.length(); i++) {
-            char c = IBAN.charAt(i);
+        for (int i = 0; i < modifiedIBAN.length(); i++) {
+            char c = modifiedIBAN.charAt(i);
             if (Character.isLetter(c)) {
                 int value = c - 'A' + 10;
                 expandedIBAN.append(value);
@@ -123,9 +125,17 @@ public class TransactionProcessorSample {
             }
         }
 
-        BigInteger bigInteger = new BigInteger(expandedIBAN.toString());
+        BigInteger bigIntegerIBAN = new BigInteger(expandedIBAN.toString());
         BigInteger modulus = new BigInteger("97");
-        return bigInteger.mod(modulus).intValue() == 1;
+        int remainder = bigIntegerIBAN.mod(modulus).intValue();
+        int checkDigits = 98 - remainder;
+
+        String checkDigitsString = String.valueOf(checkDigits);
+        if (checkDigits < 10) {
+            checkDigitsString = "0" + checkDigitsString;
+        }
+
+        return checkDigitsString.equals(IBAN.substring(2, 4));
     }
 
     private static BinMapping findBinMapping(Transaction transaction, List<BinMapping> binMappings) {
@@ -159,20 +169,22 @@ public class TransactionProcessorSample {
     }
 
     private static boolean isAccountCountryValid(Transaction transaction, List<Event> events) {
-        String accountCountry = transaction.accountNumber.substring(0, 2);
-        String userCountry = transaction.user.country;
-        if (!userCountry.equals(accountCountry)) {
-            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid account country " + accountCountry + "; expected " + userCountry));
+        String accountCountryAlpha2code = transaction.accountNumber.substring(0, 2);
+        String userCountryAlpha2code = transaction.user.country;
+        if (!userCountryAlpha2code.equals(accountCountryAlpha2code)) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid account country " + accountCountryAlpha2code + "; expected " + userCountryAlpha2code));
             return false;
         }
         return true;
     }
 
     private static boolean isCardCountryValid(Transaction transaction, List<Event> events) {
-        String cardCountry = transaction.binMapping.country.substring(0, 2);
-        String userCountry = transaction.user.country;
-        if (!userCountry.equals(cardCountry)) {
-            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid country " + cardCountry + "; expected " + userCountry));
+        String cardCountryAlpha3code = transaction.binMapping.country;
+        String userCountryAlpha2code = transaction.user.country;
+        Locale locale = new Locale.Builder().setRegion(userCountryAlpha2code).build();
+        String userCountryAlpha3Code = locale.getISO3Country();
+        if (!userCountryAlpha3Code.equals(cardCountryAlpha3code)) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid country " + cardCountryAlpha3code + "; expected " + userCountryAlpha2code + " ("+ userCountryAlpha3Code + ")"));
             return false;
         }
         return true;
@@ -211,7 +223,6 @@ public class TransactionProcessorSample {
 
     private static boolean isAmountExceedingBalance(Transaction transaction, List<Event> events, BigDecimal amount) {
         BigDecimal balance = new BigDecimal(transaction.user.balance);
-
         if (transaction.type.equals("WITHDRAW") && amount.compareTo(balance) > 0) {
             events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Not enough balance to withdraw " + amount + " - balance is too low at " + balance));
             return true;
@@ -262,28 +273,35 @@ public class TransactionProcessorSample {
 
     private static boolean isAmountValid(Transaction transaction, List<Event> events) {
         BigDecimal amount = new BigDecimal(transaction.amount);
-        if (amount.compareTo(BigDecimal.ZERO) <= 0 || isAmountExceedingBalance(transaction, events, amount)) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid amount " + amount));
             return false;
         } else if (transaction.type.equals("DEPOSIT")) {
             return isDepositAmountValid(transaction, events, amount);
         } else if (transaction.type.equals("WITHDRAW")) {
-            return isWithdrawAmountValid(transaction, events, amount) && hasSuccessfulDeposit(transaction, events);
+            return isWithdrawAmountValid(transaction, events, amount) && !isAmountExceedingBalance(transaction, events, amount) && hasSuccessfulDeposit(transaction, events);
         }
         events.add(new Event(transaction.transactionId, Event.STATUS_DECLINED, "Invalid transaction type " + transaction.type));
         return false;
     }
 
-//    private static void writeBalances(final Path filePath, final List<User> users) {
-//    }
-//
-//    private static void writeEvents(final Path filePath, final List<Event> events) throws IOException {
-//        try (final FileWriter writer = new FileWriter(filePath.toFile(), false)) {
-//            writer.append("transaction_id,status,message\n");
-//            for (final var event : events) {
-//                writer.append(event.transactionId).append(",").append(event.status).append(",").append(event.message).append("\n");
-//            }
-//        }
-//    }
+    private static void writeBalances(final Path filePath, final List<User> users) throws IOException {
+        try (final FileWriter writer = new FileWriter(filePath.toFile(), false)) {
+            writer.append("user_id,balance\n");
+            for (final var user : users) {
+                writer.append(user.userId).append(",").append(user.balance).append("\n");
+            }
+        }
+    }
+
+    private static void writeEvents(final Path filePath, final List<Event> events) throws IOException {
+        try (final FileWriter writer = new FileWriter(filePath.toFile(), false)) {
+            writer.append("transaction_id,status,message\n");
+            for (final var event : events) {
+                writer.append(event.transactionId).append(",").append(event.status).append(",").append(event.message).append("\n");
+            }
+        }
+    }
 }
 
 class User {
